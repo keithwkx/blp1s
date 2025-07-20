@@ -21,20 +21,22 @@ blueprint:
         entity:
           domain: sensor
     pla_keyword:
-      name: PLA Keyword (optional)
-      description: Keyword to detect PLA filament (case-insensitive)
+      name: PLA Keyword
+      description: Text to match against filament tray (e.g., "pla")
       default: "pla"
       selector:
         text:
+
 mode: parallel
+
 trigger:
   - platform: state
-    id: start
+    id: start_print
     entity_id: !input printer_stage
     to: "Printing"
 
   - platform: state
-    id: filament_change
+    id: tray_update
     entity_id: !input filament_tray
 
   - platform: state
@@ -44,11 +46,9 @@ trigger:
 
 variables:
   riser: !input riser_switch
-  stage: !input printer_stage
   tray: !input filament_tray
+  stage: !input printer_stage
   keyword: !input pla_keyword
-  is_pla: >
-    {{ keyword | lower in (states(tray) | lower) }}
 
 action:
   - choose:
@@ -56,11 +56,11 @@ action:
           - condition: or
             conditions:
               - condition: trigger
-                id: start
+                id: start_print
               - condition: and
                 conditions:
                   - condition: trigger
-                    id: filament_change
+                    id: tray_update
                   - condition: state
                     entity_id: !input printer_stage
                     state: "Printing"
@@ -68,14 +68,16 @@ action:
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ is_pla }}"
+                    value_template: >
+                      {{ keyword | lower in (states(tray) | lower) }}
                 sequence:
                   - service: switch.turn_on
                     target:
                       entity_id: "{{ riser }}"
               - conditions:
                   - condition: template
-                    value_template: "{{ not is_pla }}"
+                    value_template: >
+                      {{ keyword | lower not in (states(tray) | lower) }}
                 sequence:
                   - service: switch.turn_off
                     target:
