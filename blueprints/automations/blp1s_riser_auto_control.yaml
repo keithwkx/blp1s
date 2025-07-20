@@ -1,0 +1,91 @@
+blueprint:
+  name: "BLP1S Riser Auto Control"
+  description: >
+    Automatically controls Bambu Lab P1S riser based on filament type (PLA or not), printing status,
+    and closes it 30 minutes after printing ends.
+  domain: automation
+  input:
+    riser_switch:
+      name: Riser Switch
+      selector:
+        entity:
+          domain: switch
+    printer_stage:
+      name: Printer Stage Sensor
+      selector:
+        entity:
+          domain: sensor
+    filament_tray:
+      name: Filament Tray Sensor
+      selector:
+        entity:
+          domain: sensor
+    pla_keyword:
+      name: PLA Keyword (optional)
+      description: Keyword to detect PLA filament (case-insensitive)
+      default: "pla"
+      selector:
+        text:
+mode: parallel
+trigger:
+  - platform: state
+    id: start
+    entity_id: !input printer_stage
+    to: "Printing"
+
+  - platform: state
+    id: filament_change
+    entity_id: !input filament_tray
+
+  - platform: state
+    id: print_done
+    entity_id: !input printer_stage
+    from: "Printing"
+
+variables:
+  riser: !input riser_switch
+  stage: !input printer_stage
+  tray: !input filament_tray
+  keyword: !input pla_keyword | lower
+  is_pla: >
+    {{ keyword in (states(tray) | lower) }}
+
+action:
+  - choose:
+      - conditions:
+          - condition: or
+            conditions:
+              - condition: trigger
+                id: start
+              - condition: and
+                conditions:
+                  - condition: trigger
+                    id: filament_change
+                  - condition: state
+                    entity_id: !input printer_stage
+                    state: "Printing"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ is_pla }}"
+                sequence:
+                  - service: switch.turn_on
+                    target:
+                      entity_id: "{{ riser }}"
+              - conditions:
+                  - condition: template
+                    value_template: "{{ not is_pla }}"
+                sequence:
+                  - service: switch.turn_off
+                    target:
+                      entity_id: "{{ riser }}"
+      - conditions:
+          - condition: trigger
+            id: print_done
+        sequence:
+          - delay:
+              minutes: 30
+          - service: switch.turn_off
+            target:
+              entity_id: "{{ riser }}"
