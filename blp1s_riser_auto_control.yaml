@@ -43,10 +43,11 @@ trigger:
     from: "Printing"
 
 variables:
+  i_pla_keyword: !input pla_keyword
+  keyword: "{{ i_pla_keyword | lower }}"
   riser: !input riser_switch
   stage: !input printer_stage
   tray: !input filament_tray
-  keyword: !input pla_keyword | lower
   is_pla: >
     {{ keyword in (states(tray) | lower) }}
 
