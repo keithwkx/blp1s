@@ -2,7 +2,7 @@ blueprint:
   name: "BLP1S Riser Auto Control"
   description: >
     Automatically controls Bambu Lab P1S riser based on filament type (PLA or similar), printing status,
-    and turns off 30 minutes after printing ends.
+    and turns off 30 minutes after printing ends. Also works if manually triggered.
   domain: automation
   input:
     riser_switch:
@@ -50,7 +50,8 @@ variables:
   stage: !input printer_stage
   keyword: !input pla_keyword
   matched: >
-    {{ keyword.split(',') | map('trim') | map('lower') | select('in', states(tray) | lower) | list | count > 0 }}
+    {{ keyword.split(',') | map('trim') | map('lower') |
+       select('in', states(tray) | lower) | list | count > 0 }}
 
 action:
   - choose:
@@ -91,3 +92,20 @@ action:
           - service: switch.turn_off
             target:
               entity_id: "{{ riser }}"
+  - choose: []
+    default:
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ matched }}"
+            sequence:
+              - service: switch.turn_on
+                target:
+                  entity_id: "{{ riser }}"
+          - conditions:
+              - condition: template
+                value_template: "{{ not matched }}"
+            sequence:
+              - service: switch.turn_off
+                target:
+                  entity_id: "{{ riser }}"
