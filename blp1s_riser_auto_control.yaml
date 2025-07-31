@@ -49,18 +49,20 @@ variables:
   tray: !input filament_tray
   stage: !input printer_stage
   keyword: !input pla_keyword
+  matched: >
+    {{ keyword.split(',') | map('trim') | map('lower') | select('in', states(tray) | lower) | list | count > 0 }}
 
 action:
   - choose:
       - conditions:
           - condition: or
             conditions:
-              - condition: trigger
-                id: start_print
+              - condition: template
+                value_template: "{{ trigger is not defined or trigger.id == 'start_print' }}"
               - condition: and
                 conditions:
-                  - condition: trigger
-                    id: tray_update
+                  - condition: template
+                    value_template: "{{ trigger is defined and trigger.id == 'tray_update' }}"
                   - condition: state
                     entity_id: !input printer_stage
                     state: "Printing"
@@ -68,23 +70,21 @@ action:
           - choose:
               - conditions:
                   - condition: template
-                    value_template: >
-                      {{ keyword.split(',') | map('trim') | map('lower') | select('in', states(tray) | lower) | list | count > 0 }}
+                    value_template: "{{ matched }}"
                 sequence:
                   - service: switch.turn_on
                     target:
                       entity_id: "{{ riser }}"
               - conditions:
                   - condition: template
-                    value_template: >
-                      {{ keyword.split(',') | map('trim') | map('lower') | select('in', states(tray) | lower) | list | count == 0 }}
+                    value_template: "{{ not matched }}"
                 sequence:
                   - service: switch.turn_off
                     target:
                       entity_id: "{{ riser }}"
       - conditions:
-          - condition: trigger
-            id: print_done
+          - condition: template
+            value_template: "{{ trigger is defined and trigger.id == 'print_done' }}"
         sequence:
           - delay:
               minutes: 30
