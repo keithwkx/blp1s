@@ -1,8 +1,8 @@
 blueprint:
-  name: "BLP1S Riser Auto Control (Enhanced)"
+  name: "BLP1S Riser Auto Control (Enhanced, Loop-Fixed)"
   description: >
     Automatically controls Bambu Lab P1S riser based on filament type (PLA or similar), printing status,
-    and turns off 30 minutes after printing ends. Also works if manually triggered. Includes logging.
+    and turns off 30 minutes after printing ends. Also works if manually triggered. Includes logging and anti-loop logic.
   domain: automation
   input:
     riser_switch:
@@ -52,6 +52,7 @@ variables:
     {{ keyword.split(',') | map('trim') | map('lower') |
        select('in', states(tray) | lower) | list | count > 0 }}
   is_printing: "{{ stage_value == 'printing' }}"
+  riser_state: "{{ is_state(riser, 'on') }}"
 
 action:
   - choose:
@@ -70,7 +71,7 @@ action:
           - choose:
               - conditions:
                   - condition: template
-                    value_template: "{{ matched }}"
+                    value_template: "{{ matched and not riser_state }}"
                 sequence:
                   - service: switch.turn_on
                     target:
@@ -81,7 +82,7 @@ action:
                       message: "Matched filament ({{ states(tray) }}). Riser turned ON."
               - conditions:
                   - condition: template
-                    value_template: "{{ not matched }}"
+                    value_template: "{{ not matched and riser_state }}"
                 sequence:
                   - service: switch.turn_off
                     target:
@@ -90,12 +91,16 @@ action:
                     data:
                       title: "Riser Deactivated"
                       message: "No matching filament. Riser turned OFF."
+
       - conditions:
           - condition: template
             value_template: "{{ trigger is defined and trigger.id == 'print_done' and not is_printing }}"
         sequence:
           - delay:
               minutes: 30
+          - condition: state
+            entity_id: "{{ riser }}"
+            state: 'on'
           - service: switch.turn_off
             target:
               entity_id: "{{ riser }}"
@@ -104,28 +109,31 @@ action:
               title: "Riser Auto-Off"
               message: "Print ended. Riser turned OFF after 30 minutes."
 
-  - choose: []
-    default:
-      - choose:
-          - conditions:
-              - condition: template
-                value_template: "{{ matched }}"
-            sequence:
-              - service: switch.turn_on
-                target:
-                  entity_id: "{{ riser }}"
-              - service: persistent_notification.create
-                data:
-                  title: "Manual Trigger"
-                  message: "Matched filament ({{ states(tray) }}). Riser turned ON."
-          - conditions:
-              - condition: template
-                value_template: "{{ not matched }}"
-            sequence:
-              - service: switch.turn_off
-                target:
-                  entity_id: "{{ riser }}"
-              - service: persistent_notification.create
-                data:
-                  title: "Manual Trigger"
-                  message: "No matching filament. Riser turned OFF."
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger is undefined }}"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ matched and not riser_state }}"
+                sequence:
+                  - service: switch.turn_on
+                    target:
+                      entity_id: "{{ riser }}"
+                  - service: persistent_notification.create
+                    data:
+                      title: "Manual Trigger"
+                      message: "Matched filament ({{ states(tray) }}). Riser turned ON."
+              - conditions:
+                  - condition: template
+                    value_template: "{{ not matched and riser_state }}"
+                sequence:
+                  - service: switch.turn_off
+                    target:
+                      entity_id: "{{ riser }}"
+                  - service: persistent_notification.create
+                    data:
+                      title: "Manual Trigger"
+                      message: "No matching filament. Riser turned OFF."
