@@ -1,9 +1,8 @@
 blueprint:
   name: "Chamber Heater Auto Control (BLP1S)"
   description: >
-    Automatically controls the chamber heater based on print status and filament type.
-    Turns ON when printing with materials like ABS/ASA/etc., and turns OFF after 10 minutes of idle.
-    Uses regex matching (case-insensitive) for material detection and logs all actions.
+    Automatically turns the chamber heater ON when printing with materials like ABS/ASA/etc.,
+    and OFF after 10 minutes of idle time. Uses case-insensitive regex to match materials.
   domain: automation
   input:
     heater_switch:
@@ -22,15 +21,15 @@ blueprint:
         entity:
           domain: sensor
     last_on_time:
-      name: Last Heater ON Timestamp
+      name: Last Heater ON Timestamp (input_datetime)
       selector:
         entity:
           domain: input_datetime
     heater_materials:
       name: Heater Materials (Regex)
       description: >
-        Case-insensitive regex pattern to match filament types needing heat (e.g. "abs|asa|pc|pa|hips|cf").
-        Example: "abs|asa"
+        Regex pattern (case-insensitive) to detect filament types that need chamber heating.
+        Example: "abs|asa|pc|pa|hips|cf"
       default: "abs|asa|pc|pa|hips|cf"
       selector:
         text:
@@ -42,18 +41,22 @@ trigger:
     minutes: "/5"
 
 variables:
-  status: !input printer_status
-  tray: !input filament_tray
   heater: !input heater_switch
+  tray: !input filament_tray
+  status: !input printer_status
   last_on: !input last_on_time
   pattern: !input heater_materials
+
   material: "{{ states(tray) | default('', true) }}"
   print_status: "{{ states(status) | lower | default('unknown') }}"
   is_printing: "{{ print_status == 'running' }}"
   is_idle: "{{ print_status in ['idle', 'completed', 'finished'] }}"
+
   needs_heater: >
     {{ material not in ['UNAVAILABLE', 'UNKNOWN', ''] and
        material | regex_search(pattern, ignorecase=True) }}
+
+  now_time: "{{ now().isoformat() }}"
   last_on_secs_ago: >
     {{
       (now() - (states(last_on) | as_datetime(default=now() - timedelta(minutes=11)))).total_seconds()
@@ -69,10 +72,9 @@ action:
             target:
               entity_id: "{{ heater }}"
           - service: input_datetime.set_datetime
-            target:
-              entity_id: "{{ last_on }}"
             data:
-              datetime: "{{ now().isoformat() }}"
+              entity_id: "{{ last_on }}"
+              datetime: "{{ now_time }}"
           - service: persistent_notification.create
             data:
               title: "Chamber Heater"
@@ -87,4 +89,9 @@ action:
           - service: persistent_notification.create
             data:
               title: "Chamber Heater"
-              message: "Turned OFF after 10-minute c
+              message: "Turned OFF after 10-minute cooldown following print."
+    default:
+      - service: persistent_notification.create
+        data:
+          title: "Chamber Heater"
+          message: "No action taken. Status: {{ print_status }}, Material: {{ material }}."
