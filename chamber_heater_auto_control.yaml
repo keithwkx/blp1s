@@ -1,0 +1,74 @@
+blueprint:
+  name: "Chamber Heater Auto Control (BLP1S)"
+  description: >
+    Automatically controls the chamber heater based on print status and filament type.
+    Turns ON when printing with materials like ABS/ASA/etc., and turns OFF after 10 minutes of idle.
+    Uses regex matching (case-insensitive) for material detection and logs all actions.
+  domain: automation
+  input:
+    heater_switch:
+      name: Chamber Heater Switch
+      selector:
+        entity:
+          domain: switch
+    printer_status:
+      name: Printer Status Sensor
+      selector:
+        entity:
+          domain: sensor
+    filament_tray:
+      name: Filament Tray Sensor
+      selector:
+        entity:
+          domain: sensor
+    last_on_time:
+      name: Last Heater ON Timestamp
+      selector:
+        entity:
+          domain: input_datetime
+    heater_materials:
+      name: Heater Materials (Regex)
+      description: >
+        Case-insensitive regex pattern to match filament types needing heat (e.g. "abs|asa|pc|pa|hips|cf").
+        Example: "abs|asa"
+      default: "abs|asa|pc|pa|hips|cf"
+      selector:
+        text:
+
+mode: single
+
+trigger:
+  - platform: time_pattern
+    minutes: "/5"
+
+variables:
+  status: !input printer_status
+  tray: !input filament_tray
+  heater: !input heater_switch
+  last_on: !input last_on_time
+  pattern: !input heater_materials
+  material: "{{ states(tray) | default('', true) }}"
+  print_status: "{{ states(status) | lower | default('unknown') }}"
+  is_printing: "{{ print_status == 'running' }}"
+  is_idle: "{{ print_status in ['idle', 'completed', 'finished'] }}"
+  needs_heater: >
+    {{ material not in ['UNAVAILABLE', 'UNKNOWN', ''] and
+       material | regex_search(pattern, ignorecase=True) }}
+  last_on_secs_ago: >
+    {{
+      (now() - (states(last_on) | as_datetime(default=now() - timedelta(minutes=11)))).total_seconds()
+    }}
+
+action:
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ is_printing and needs_heater }}"
+        sequence:
+          - service: switch.turn_on
+            target:
+              entity_id: "{{ heater }}"
+          - service: input_datetime.set_datetime
+            data:
+              entity_id: "{{ last_on }}"
+              datetime: "{{ now().
