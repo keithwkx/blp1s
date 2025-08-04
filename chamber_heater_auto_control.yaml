@@ -71,4 +71,24 @@ action:
           - service: input_datetime.set_datetime
             data:
               entity_id: "{{ last_on }}"
-              datetime: "{{ now().
+              datetime: "{{ now().isoformat() }}"
+          - service: persistent_notification.create
+            data:
+              title: "Chamber Heater"
+              message: "Turned ON due to printing with material: {{ material }}."
+      - conditions:
+          - condition: template
+            value_template: "{{ is_idle and last_on_secs_ago > 600 }}"
+        sequence:
+          - service: switch.turn_off
+            target:
+              entity_id: "{{ heater }}"
+          - service: persistent_notification.create
+            data:
+              title: "Chamber Heater"
+              message: "Turned OFF after 10-minute cooldown following print."
+    default:
+      - service: persistent_notification.create
+        data:
+          title: "Chamber Heater"
+          message: "No action taken. Status: {{ print_status }}, Material: {{ material }}."
