@@ -1,9 +1,9 @@
 blueprint:
-  name: "Chamber Heater Auto Control (BLP1S) – With Alerts & Override"
+  name: "Chamber Heater Auto Control (BLP1S)"
   description: >
     Automatically turns the chamber heater ON when printing with materials like ABS/ASA/etc.,
-    and OFF after 10 minutes of idle time. Uses case-insensitive regex to match materials.
-    Includes notification alerts and a manual override switch to disable automation.
+    and OFF after 10 minutes of idle time. Case-insensitive regex matching for both material
+    and printer status. Includes notification alerts and manual override.
   domain: automation
   input:
     heater_switch:
@@ -34,16 +34,10 @@ blueprint:
       default: "abs|asa|pc|pa|hips|cf"
       selector:
         text:
-    notify_device:
-      name: Notify Device (optional)
-      default: null
-      selector:
-        device:
-          integration: mobile_app
-    override_switch:
-      name: Manual Override Switch
-      description: If ON, automation is bypassed
-      default: null
+    manual_override:
+      name: Manual Override (input_boolean)
+      description: >
+        When ON, disables automation logic and prevents any automatic heater control.
       selector:
         entity:
           domain: input_boolean
@@ -60,18 +54,16 @@ variables:
   status: !input printer_status
   last_on: !input last_on_time
   pattern: !input heater_materials
-  notify: !input notify_device
-  override: "{{ states(!input.override_switch) == 'on' if !input.override_switch else false }}"
+  override: !input manual_override
 
+  is_override: "{{ is_state(override, 'on') }}"
   material: "{{ states(tray) | default('', true) }}"
-  print_status: "{{ states(status) | lower | default('unknown') }}"
-  is_printing: "{{ print_status == 'running' }}"
-  is_idle: "{{ print_status in ['idle', 'completed', 'finished'] }}"
-
+  print_status: "{{ states(status) | default('unknown') }}"
+  is_printing: "{{ print_status | regex_search('^printing$', ignorecase=True) }}"
+  is_idle: "{{ print_status | regex_search('^(idle|completed|finished)$', ignorecase=True) }}"
   needs_heater: >
     {{ material not in ['UNAVAILABLE', 'UNKNOWN', ''] and
        material | regex_search(pattern, ignorecase=True) }}
-
   now_time: "{{ now().isoformat() }}"
   last_on_secs_ago: >
     {{
@@ -82,16 +74,7 @@ action:
   - choose:
       - conditions:
           - condition: template
-            value_template: "{{ override }}"
-        sequence:
-          - service: persistent_notification.create
-            data:
-              title: "Chamber Heater"
-              message: "Automation bypassed – manual override is ON."
-  - choose:
-      - conditions:
-          - condition: template
-            value_template: "{{ is_printing and needs_heater and not override }}"
+            value_template: "{{ not is_override and is_printing and needs_heater }}"
         sequence:
           - service: switch.turn_on
             target:
@@ -103,17 +86,10 @@ action:
           - service: persistent_notification.create
             data:
               title: "Chamber Heater"
-              message: "Turned ON due to printing with material: {{ material }}."
-          - choose:
-              - conditions: "{{ notify is not none }}"
-                sequence:
-                  - service: notify.mobile_app_{{ device_attr(notify, 'name') | slugify }}
-                    data:
-                      title: "Chamber Heater"
-                      message: "✅ Heater ON for {{ material.upper() }}"
+              message: "✅ Turned ON due to printing with material: {{ material }}."
       - conditions:
           - condition: template
-            value_template: "{{ is_idle and last_on_secs_ago > 600 and not override }}"
+            value_template: "{{ not is_override and is_idle and last_on_secs_ago > 600 }}"
         sequence:
           - service: switch.turn_off
             target:
@@ -121,18 +97,13 @@ action:
           - service: persistent_notification.create
             data:
               title: "Chamber Heater"
-              message: "Turned OFF after 10-minute cooldown following print."
-          - choose:
-              - conditions: "{{ notify is not none }}"
-                sequence:
-                  - service: notify.mobile_app_{{ device_attr(notify, 'name') | slugify }}
-                    data:
-                      title: "Chamber Heater"
-                      message: "⏹️ Heater OFF after print completed"
+              message: "⏹️ Turned OFF after 10-minute cooldown following print."
     default:
       - service: persistent_notification.create
         data:
           title: "Chamber Heater"
           message: >
-            No action taken. Status: {{ print_status }}, Material: {{ material }},
-            Override: {{ override }}.
+            ℹ️ No action taken.
+            Override: {{ is_override }},
+            Status: {{ print_status }},
+            Material: {{ material }}.
