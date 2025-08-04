@@ -69,8 +69,9 @@ action:
             target:
               entity_id: "{{ heater }}"
           - service: input_datetime.set_datetime
-            data:
+            target:
               entity_id: "{{ last_on }}"
+            data:
               datetime: "{{ now().isoformat() }}"
           - service: persistent_notification.create
             data:
@@ -86,9 +87,4 @@ action:
           - service: persistent_notification.create
             data:
               title: "Chamber Heater"
-              message: "Turned OFF after 10-minute cooldown following print."
-    default:
-      - service: persistent_notification.create
-        data:
-          title: "Chamber Heater"
-          message: "No action taken. Status: {{ print_status }}, Material: {{ material }}."
+              message: "Turned OFF after 10-minute c
