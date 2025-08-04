@@ -98,9 +98,8 @@ action:
         sequence:
           - delay:
               minutes: 30
-          - condition: state
-            entity_id: "{{ riser }}"
-            state: 'on'
+          - condition: template
+            value_template: "{{ is_state(riser, 'on') }}"
           - service: switch.turn_off
             target:
               entity_id: "{{ riser }}"
