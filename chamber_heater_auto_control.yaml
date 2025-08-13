@@ -66,9 +66,9 @@ variables:
        material | regex_search(pattern, ignorecase=True) }}
   now_time: "{{ now().isoformat() }}"
   last_on_secs_ago: >
-    {{
-      (now() - (states(last_on) | as_datetime(default=now() - timedelta(minutes=11)))).total_seconds()
-    }}
+    {% set last_on_state = states(last_on) %}
+    {% set last_on_time = last_on_state if last_on_state not in ['unknown','unavailable',''] else (now() - timedelta(minutes=11)) %}
+    {{ (now().timestamp() - as_timestamp(last_on_time)) }}
 
 action:
   - choose:
