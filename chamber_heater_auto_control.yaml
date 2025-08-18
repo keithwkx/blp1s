@@ -98,12 +98,3 @@ action:
             data:
               title: "Chamber Heater"
               message: "⏹️ Turned OFF after 10-minute cooldown following print."
-    default:
-      - service: persistent_notification.create
-        data:
-          title: "Chamber Heater"
-          message: >
-            ℹ️ No action taken.
-            Override: {{ is_override }},
-            Status: {{ print_status }},
-            Material: {{ material }}.
