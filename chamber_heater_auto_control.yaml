@@ -3,7 +3,7 @@ blueprint:
   description: >
     Automatically turns the chamber heater ON when printing with materials like ABS/ASA/etc.,
     and OFF after 10 minutes of idle time. Case-insensitive regex matching for both material
-    and printer status. Includes notification alerts and manual override.
+    and printer status. Uses logbook entries instead of pop-up notifications.
   domain: automation
   input:
     heater_switch:
@@ -83,10 +83,10 @@ action:
             data:
               entity_id: "{{ last_on }}"
               datetime: "{{ now_time }}"
-          - service: persistent_notification.create
+          - service: logbook.log
             data:
-              title: "Chamber Heater"
-              message: "✅ Turned ON due to printing with material: {{ material }}."
+              name: "Chamber Heater"
+              message: "Turned ON due to printing with material: {{ material }}."
       - conditions:
           - condition: template
             value_template: "{{ not is_override and is_idle and last_on_secs_ago > 600 }}"
@@ -94,7 +94,7 @@ action:
           - service: switch.turn_off
             target:
               entity_id: "{{ heater }}"
-          - service: persistent_notification.create
+          - service: logbook.log
             data:
-              title: "Chamber Heater"
-              message: "⏹️ Turned OFF after 10-minute cooldown following print."
+              name: "Chamber Heater"
+              message: "Turned OFF after 10-minute cooldown following print."
